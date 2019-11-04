@@ -8,6 +8,7 @@ pub extern crate redis;
 use std::error;
 use std::error::Error as _StdError;
 use std::fmt;
+use std::time::Duration;
 
 /// A unified enum of errors returned by redis::Client
 #[derive(Debug)]
@@ -38,7 +39,7 @@ impl error::Error for Error {
             Error::Other(ref err) => {
                 #[allow(deprecated)] // `cause` is replaced by `Error:source` in 1.33
                 err.cause()
-            },
+            }
         }
     }
 }
@@ -57,7 +58,7 @@ impl error::Error for Error {
 /// use r2d2_redis::{r2d2, redis, RedisConnectionManager};
 ///
 /// fn main() {
-///     let manager = RedisConnectionManager::new("redis://localhost").unwrap();
+///     let manager = RedisConnectionManager::new("redis://localhost", None).unwrap();
 ///     let pool = r2d2::Pool::builder()
 ///         .build(manager)
 ///         .unwrap();
@@ -83,6 +84,7 @@ impl error::Error for Error {
 #[derive(Debug)]
 pub struct RedisConnectionManager {
     connection_info: redis::ConnectionInfo,
+    timeout: Option<Duration>,
 }
 
 impl RedisConnectionManager {
@@ -92,9 +94,11 @@ impl RedisConnectionManager {
     /// types.
     pub fn new<T: redis::IntoConnectionInfo>(
         params: T,
+        timeout: Option<Duration>,
     ) -> Result<RedisConnectionManager, redis::RedisError> {
         Ok(RedisConnectionManager {
             connection_info: params.into_connection_info()?,
+            timeout,
         })
     }
 }
@@ -105,7 +109,12 @@ impl r2d2::ManageConnection for RedisConnectionManager {
 
     fn connect(&self) -> Result<redis::Connection, Error> {
         match redis::Client::open(self.connection_info.clone()) {
-            Ok(client) => client.get_connection().map_err(Error::Other),
+            Ok(client) => if let Some(timeout) = self.timeout {
+                client.get_connection_with_timeout(timeout)
+            } else {
+                client.get_connection()
+            }
+            .map_err(Error::Other),
             Err(err) => Err(Error::Other(err)),
         }
     }

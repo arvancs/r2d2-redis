@@ -7,10 +7,8 @@ use r2d2_redis::{r2d2, redis, RedisConnectionManager};
 use redis::Commands;
 
 fn main() {
-    let manager = RedisConnectionManager::new("redis://localhost").unwrap();
-    let pool = r2d2::Pool::builder()
-        .build(manager)
-        .unwrap();
+    let manager = RedisConnectionManager::new("redis://localhost", None).unwrap();
+    let pool = r2d2::Pool::builder().build(manager).unwrap();
 
     let mut handles = vec![];
 
