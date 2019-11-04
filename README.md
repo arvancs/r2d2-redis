@@ -39,7 +39,7 @@ use r2d2_redis::{r2d2, RedisConnectionManager};
 use r2d2_redis::redis::Commands;
 
 fn main() {
-    let manager = RedisConnectionManager::new("redis://localhost").unwrap();
+    let manager = RedisConnectionManager::new("redis://localhost", None).unwrap();
     let pool = r2d2::Pool::builder()
         .build(manager)
         .unwrap();
@@ -76,7 +76,7 @@ use std::thread;
 use r2d2_redis::{r2d2, redis, RedisConnectionManager};
 
 fn main() {
-    let manager = RedisConnectionManager::new("redis://localhost").unwrap();
+    let manager = RedisConnectionManager::new("redis://localhost", None).unwrap();
     let pool = r2d2::Pool::builder()
         .build(manager)
         .unwrap();
