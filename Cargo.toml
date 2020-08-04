@@ -1,18 +1,14 @@
 [package]
-name = "r2d2_redis"
+name = "redis_r2d2"
 version = "0.17.0"
-authors = [
-    "Steven Fackler <sfackler@gmail.com>",
-    "Nev Delap <nevdelap@gmail.com>",
-    "Simo Kinnunen <simo@shoqolate.com>",
-    "Jan-Erik Rediger <janerik@fnordig.de>"
-]
-license = "MIT"
+authors = ["ACS <arvancs@gmail.com>"]
+license = "MIT/Apache-2.0"
 description = "Redis support for the r2d2 connection pool"
-repository = "https://github.com/sorccu/r2d2-redis"
-documentation = "https://docs.rs/r2d2_redis/0.13.0"
+repository = "https://github.com/arvancs/r2d2-redis"
+documentation = "https://docs.rs/redis_r2d2"
 keywords = ["redis", "pool", "database", "r2d2"]
 include = ["src/**/*", "LICENSE", "Cargo.toml"]
+edition = "2018"
 
 [dependencies]
 r2d2 = "0.8"

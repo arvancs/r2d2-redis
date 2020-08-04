@@ -1,44 +1,11 @@
 //! Redis support for the `r2d2` connection pool.
-#![doc(html_root_url = "https://docs.rs/r2d2_redis/0.13.0")]
-#![warn(missing_docs)]
+#![doc(html_root_url = "https://docs.rs/redis_r2d2")]
 
 pub extern crate r2d2;
 pub extern crate redis;
 
-use std::error;
-use std::error::Error as _StdError;
-use std::fmt;
-use std::time::Duration;
-
 use redis::ConnectionLike;
-
-/// A unified enum of errors returned by redis::Client
-#[derive(Debug)]
-pub enum Error {
-    /// A redis::RedisError
-    Other(redis::RedisError),
-}
-
-impl fmt::Display for Error {
-    fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
-        #[allow(deprecated)] // `cause` is replaced by `Error:source` in 1.33
-        match self.cause() {
-            Some(cause) => write!(fmt, "{}: {}", self.description(), cause),
-            None => write!(fmt, "{}", self.description()),
-        }
-    }
-}
-
-impl error::Error for Error {
-    fn cause(&self) -> Option<&dyn error::Error> {
-        match *self {
-            Error::Other(ref err) => {
-                #[allow(deprecated)] // `cause` is replaced by `Error:source` in 1.33
-                err.cause()
-            }
-        }
-    }
-}
+use std::time::Duration;
 
 /// An `r2d2::ConnectionManager` for `redis::Client`s.
 ///
@@ -46,12 +13,10 @@ impl error::Error for Error {
 ///
 
 /// ```
-/// extern crate r2d2_redis;
-///
 /// use std::ops::DerefMut;
 /// use std::thread;
 ///
-/// use r2d2_redis::{r2d2, redis, RedisConnectionManager};
+/// use redis_r2d2::{r2d2, redis, RedisConnectionManager};
 ///
 /// fn main() {
 ///     let manager = RedisConnectionManager::new("redis://localhost").unwrap();
@@ -67,7 +32,7 @@ impl error::Error for Error {
 ///             let mut conn = pool.get().unwrap();
 ///             let reply = redis::cmd("PING").query::<String>(conn.deref_mut()).unwrap();
 ///             // Alternatively, without deref():
-///             // let reply = redis::cmd("PING").query::<String>(&mut *conn).unwrap();
+///             let reply = redis::cmd("PING").query::<String>(&mut *conn).unwrap();
 ///             assert_eq!("PONG", reply);
 ///         }));
 ///     }
@@ -86,19 +51,19 @@ pub struct RedisConnectionManager {
 impl RedisConnectionManager {
     /// Creates a new `RedisConnectionManager`.
     ///
-    /// See `redis::Client::open` for a description of the parameter
+    /// See `redis::Client::open` for a to_string of the parameter
     /// types.
     pub fn new<T: redis::IntoConnectionInfo>(
         params: T,
     ) -> Result<RedisConnectionManager, redis::RedisError> {
-        RedisConnectionManager::new_with_timeout(params, None)
+        RedisConnectionManager::with_timeout(params, None)
     }
 
     /// Creates a new `RedisConnectionManager` with connection `timeout`.
     ///
-    /// See `redis::Client::open` for a description of the parameter
+    /// See `redis::Client::open` for a to_string of the parameter
     /// types.
-    pub fn new_with_timeout<T: redis::IntoConnectionInfo>(
+    pub fn with_timeout<T: redis::IntoConnectionInfo>(
         params: T,
         timeout: Option<Duration>,
     ) -> Result<RedisConnectionManager, redis::RedisError> {
@@ -111,25 +76,72 @@ impl RedisConnectionManager {
 
 impl r2d2::ManageConnection for RedisConnectionManager {
     type Connection = redis::Connection;
-    type Error = Error;
+    type Error = redis::RedisError;
 
-    fn connect(&self) -> Result<redis::Connection, Error> {
-        match redis::Client::open(self.connection_info.clone()) {
-            Ok(client) => if let Some(timeout) = self.timeout {
+    fn connect(&self) -> Result<redis::Connection, Self::Error> {
+        redis::Client::open(self.connection_info.clone()).and_then(|client| {
+            if let Some(timeout) = self.timeout {
                 client.get_connection_with_timeout(timeout)
             } else {
                 client.get_connection()
             }
-            .map_err(Error::Other),
-            Err(err) => Err(Error::Other(err)),
-        }
+        })
     }
 
-    fn is_valid(&self, conn: &mut redis::Connection) -> Result<(), Error> {
-        redis::cmd("PING").query(conn).map_err(Error::Other)
+    fn is_valid(&self, conn: &mut redis::Connection) -> Result<(), Self::Error> {
+        redis::cmd("PING").query(conn)
     }
 
     fn has_broken(&self, conn: &mut redis::Connection) -> bool {
         !conn.is_open()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::mpsc;
+    use std::thread;
+
+    #[test]
+    fn test_basic() {
+        let manager = RedisConnectionManager::new("redis://localhost").unwrap();
+        let pool = r2d2::Pool::builder().max_size(2).build(manager).unwrap();
+
+        let (s1, r1) = mpsc::channel();
+        let (s2, r2) = mpsc::channel();
+
+        let pool1 = pool.clone();
+        let t1 = thread::spawn(move || {
+            let conn = pool1.get().unwrap();
+            s1.send(()).unwrap();
+            r2.recv().unwrap();
+            drop(conn);
+        });
+
+        let pool2 = pool.clone();
+        let t2 = thread::spawn(move || {
+            let conn = pool2.get().unwrap();
+            s2.send(()).unwrap();
+            r1.recv().unwrap();
+            drop(conn);
+        });
+
+        t1.join().unwrap();
+        t2.join().unwrap();
+
+        pool.get().unwrap();
+    }
+
+    #[test]
+    fn test_is_valid() {
+        let manager = RedisConnectionManager::new("redis://localhost").unwrap();
+        let pool = r2d2::Pool::builder()
+            .max_size(1)
+            .test_on_check_out(true)
+            .build(manager)
+            .unwrap();
+
+        pool.get().unwrap();
     }
 }
