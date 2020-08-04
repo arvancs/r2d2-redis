@@ -15,12 +15,6 @@ Add this to your `Cargo.toml`:
 redis_r2d2 = "*"
 ```
 
-Then check out the examples below.
-
-# Examples
-
-See [examples](examples) for runnable examples.
-
 ## Standard usage
 
 This example shows a standard use case with convenience methods provided by `redis::Commands`. You'll note that it's practically the same as if you were using the redis crate directly. Thanks to the `Deref` trait, you'll be able to call any `Connection` method directly on a pooled connection.
